@@ -1,0 +1,7 @@
+This is my answer to homework 1. I replaced ALL of the sse2 instructions with llvm standard IR instructions.
+Each sse2 instruction is translated into corresponding function of LLVM standard instructions.
+For example,sse2 function @llvm.x86.sse2.packuswb.128 is translated into @llvm_x86_sse2_packuswb_128 function (you can see all the functions in a separate file new_fun.txt or the end of the mod-re.ll file)
+However, it's obvious that using non-sse2 function will slow down the execution speed.
+
+Name:HuangKai 
+Student id:21321204
