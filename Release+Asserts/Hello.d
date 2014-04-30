@@ -93,7 +93,9 @@
  /home/huangkai/llvm/include/llvm/Support/TargetSelect.h \
  /home/huangkai/llvm/include/llvm/Transforms/Utils/BasicBlockUtils.h \
  /home/huangkai/llvm/include/llvm/IR/CFG.h \
- /home/huangkai/llvm/include/llvm/ADT/GraphTraits.h
+ /home/huangkai/llvm/include/llvm/ADT/GraphTraits.h \
+ /home/huangkai/llvm/include/llvm/IR/LegacyPassManager.h \
+ /home/huangkai/llvm/include/llvm/Transforms/IPO/PassManagerBuilder.h
 
 /home/huangkai/llvm/include/llvm/ADT/Statistic.h:
 
@@ -282,3 +284,7 @@
 /home/huangkai/llvm/include/llvm/IR/CFG.h:
 
 /home/huangkai/llvm/include/llvm/ADT/GraphTraits.h:
+
+/home/huangkai/llvm/include/llvm/IR/LegacyPassManager.h:
+
+/home/huangkai/llvm/include/llvm/Transforms/IPO/PassManagerBuilder.h:
