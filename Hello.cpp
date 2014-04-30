@@ -33,59 +33,20 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/IR/Constants.h"
 
+#include "llvm/IR/LegacyPassManager.h"
+
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+
 using namespace llvm;
-
-
-/*
-namespace {
-	struct SSE2Eliminate : public ModulePass
-	{
-		static char ID;
-		SSE2Eliminate() :ModulePass(ID) {}
-
-	public:
-		virtual bool runOnModule(Module &M)
-		{
-			LLVMContext & context = M.getContext();
-
-//#define v_2_i64 VectorType::get(Type::getInt64Ty(context) 
-
-			Function *psll_q = cast<Function>(M.getOrInsertFunction("llvm_x86_sse2_psll_q", 
-				VectorType::get(Type::getInt64Ty(context),2), 
-				VectorType::get(Type::getInt64Ty(context), 2),
-				VectorType::get(Type::getInt64Ty(context), 2), (Type*)0));
-
-			Function::ArgumentListType::iterator it = psll_q->arg_begin();
-			Argument *x = it;
-			x->setName("x");
-			Argument *y = ++it;
-			y->setName("y");
-
-			BasicBlock *bb = BasicBlock::Create(context, "body", psll_q);
-			Value *result = BinaryOperator::CreateShl(x, y, "result",bb);
-
-			ReturnInst::Create(context, result, bb);
-
-//			errs() << *psll_q << "\n";
-			return true;
-		}
-
-	};
-}
-
-
-char SSE2Eliminate::ID = 0;
-static RegisterPass<SSE2Eliminate>
-Z("funcins", "insert functions");
-*/
 
 namespace {
 	struct FuncMod : public ModulePass {
 		static char ID; // Pass identification, replacement for typeid
 		FuncMod() : ModulePass(ID) {}
 
-	public:
+		public:
 		virtual bool runOnModule(Module &M) {
+			errs() << "run on module!!\n";
 			LLVMContext & context = M.getContext();
 			Module::FunctionListType & funclist = M.getFunctionList();
 			for (Module::FunctionListType::iterator funcit = funclist.begin(); funcit != funclist.end(); funcit++)
@@ -106,77 +67,205 @@ namespace {
 						if (callinst != 0)
 						{
 							Function &llvmfunc = *(callinst->getCalledFunction());
-							if (llvmfunc.getName() == "llvm.x86.sse2.psll.q")
+							if (llvmfunc.getName() == "llvm.x86.sse2.psll.q")//pass // one to one
 							{
-								//callinst->setCalledFunction(M.getFunction("llvm_x86_sse2_psll_q"));
 								Value *v1 = *(callinst->op_begin());
 								Value *v2 = *(callinst->op_begin()+1);
 								Value *newvalue = BinaryOperator::CreateShl(v1, v2, "", callinst);
 								BasicBlock::iterator from(callinst);
 								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
-//								callinst->replaceAllUsesWith(llvm_x86_sse2_psll_q);
-//								callinst->removeFromParent();
-//								!!warning!! : current iterator is invalid !! must jump out of loop
+								
 								modified = true;
 								break;
 							}
-							if (llvmfunc.getName() == "llvm.x86.sse2.pslli.q")
+
+							if (llvmfunc.getName() == "llvm.x86.sse2.pslli.w")//pass // one to one
 							{
 								Value *v1 = *(callinst->op_begin());
 								Value *v2 = *(callinst->op_begin() + 1);
-
-								/*
-								CastInst *newY = CastInst::CreateZExtOrBitCast(v2, Type::getInt64Ty(context),"newY");
-								newY->insertAfter(callinst);
-								*/
-
 								Constant * y = dyn_cast<Constant>(v2);
 								ConstantInt * yint = dyn_cast<ConstantInt>(y);
-								if(y==0)
-									errs()<<"wrong\n";
-								ConstantInt *y64 = ConstantInt::get(Type::getInt64Ty(context), *(yint->getValue().getRawData()));
-								Constant * y2[2];
-								y2[0] = y64;
-								y2[1] = y64;
-
-								ArrayRef<Constant *> yref(y2, 2);
-								Constant * yVector = ConstantVector::get(yref);
-								// must use vector but not vector
-								//Constant * yArray = ConstantArray::get(ArrayType::get(Type::getInt64Ty(context), 2), yref);
-								/*
-								InsertElementInst *_1 = InsertElementInst::Create(yArray, newY, ConstantInt::get(Type::getInt32Ty(context), 0), "_1");
-								_1->insertAfter(newY);
-								InsertElementInst *_2 = InsertElementInst::Create(_1, newY, ConstantInt::get(Type::getInt32Ty(context), 1) , "_2");
-								_2->insertAfter(_1);
-
-								*/
-								//errs()<<*(v1->getType())<<"\n" ;
-								//errs()<<*(yArray->getType())<<"\n" ;
-								//errs() << *(yVector->getType()) << "\n";
-
+								if (y == 0)
+									errs() << "wrong\n";
+								ConstantInt *y16 = ConstantInt::get(Type::getInt16Ty(context), *(yint->getValue().getRawData()));
+								Constant *yarray[8];
+								for (int i = 0; i < 8; i++)
+									yarray[i] = y16;
+								ArrayRef<Constant *> yref(yarray, 8);
+								Constant * yVector = ConstantVector::get(yref
+									);
 								BinaryOperator *newvalue = BinaryOperator::CreateShl(v1, yVector, "");
 								newvalue->insertAfter(callinst);
 
 								BasicBlock::iterator from(callinst);
 								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
-
 								modified = true;
 								break;
 								
 							}
-							if (llvmfunc.getName() == "llvm.x86.sse2.psrl.q")
+							if (llvmfunc.getName() == "llvm.x86.sse2.pslli.q")//pass
+							{
+								Value *v1 = *(callinst->op_begin());
+								Value *v2 = *(callinst->op_begin() + 1);
+								Constant * y = dyn_cast<Constant>(v2);
+								ConstantInt * yint = dyn_cast<ConstantInt>(y);
+								if(y==0)
+									errs()<<"wrong\n";
+								ConstantInt *y64 = ConstantInt::get(Type::getInt64Ty(context), *(yint->getValue().getRawData()));
+								Constant * yarray[2];
+								yarray[0] = y64;
+								yarray[1] = y64;
+
+								ArrayRef<Constant *> yref(yarray, 2);
+								Constant * yVector = ConstantVector::get(yref);
+								BinaryOperator *newvalue = BinaryOperator::CreateShl(v1, yVector, "");
+								newvalue->insertAfter(callinst);
+
+								BasicBlock::iterator from(callinst);
+								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+								modified = true;
+								break;
+							}
+
+							if (llvmfunc.getName() == "llvm.x86.sse2.psll.dq")//pass
+							{
+								Value *v1 = *(callinst->op_begin());
+								Value *v2 = *(callinst->op_begin()+1);
+								ConstantInt *y = dyn_cast<ConstantInt>(dyn_cast<Constant>(v2));
+								ConstantInt *y128 = ConstantInt::get(Type::getIntNTy(context,128), *(y->getValue().getRawData()));
+								// Warning!! don't use CastInst::CreateZExtOrBitCast, it has a wrong type checking
+								BitCastInst *x128 = new BitCastInst(v1, Type::getIntNTy(context, 128), "x128");
+								//Instruction *x128 = CastInst::CreateZExtOrBitCast(v1, Type::getIntNTy(context, 128), "x128");
+								x128->insertAfter(callinst);
+								Instruction *newX128 = BinaryOperator::CreateShl(x128, y128, "newX128");
+								newX128->insertAfter(x128);
+								BitCastInst *newvalue = new BitCastInst(newX128, VectorType::get(Type::getInt64Ty(context),2), "");
+								newvalue->insertAfter(newX128);
+								BasicBlock::iterator from(callinst);
+								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+								modified = true;
+								break;
+							}
+
+							if (llvmfunc.getName() == "llvm.x86.sse2.psrl.q")//pass
 							{
 								Value *v1 = *(callinst->op_begin());
 								Value *v2 = *(callinst->op_begin()+1);
 								Value *newvalue = BinaryOperator::CreateLShr(v1, v2, "", callinst);
 								BasicBlock::iterator from(callinst);
 								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
-//								!!warning!! : current iterator is invalid !! must jump out of loop
+								//!!warning!! : current iterator is invalid !! must jump out of loop
 								modified = true;
 								break;
 							}
-							
 
+							if (llvmfunc.getName() == "llvm.x86.sse2.psrli.w")//pass
+							{
+								Value *v1 = *(callinst->op_begin());
+								Value *v2 = *(callinst->op_begin() + 1);
+								Constant * y = dyn_cast<Constant>(v2);
+								ConstantInt * yint = dyn_cast<ConstantInt>(y);
+								if (y == 0)
+								{
+									errs() << "wrong\n";
+									errs() << *callinst << "\n";
+									break;
+								}
+								ConstantInt *y16 = ConstantInt::get(Type::getInt16Ty(context), *(yint->getValue().getRawData()));
+								Constant *yarray[8];
+								for (int i = 0; i < 8; i++)
+									yarray[i] = y16;
+								ArrayRef<Constant *> yref(yarray, 8);
+								Constant * yVector = ConstantVector::get(yref);
+								BinaryOperator *newvalue = BinaryOperator::CreateLShr(v1, yVector, "");
+								newvalue->insertAfter(callinst);
+
+								BasicBlock::iterator from(callinst);
+								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+								modified = true;
+								break;
+							}
+
+							if (llvmfunc.getName() == "llvm.x86.sse2.psrli.d")//pass
+							{
+								Value *v1 = *(callinst->op_begin());
+								Value *v2 = *(callinst->op_begin() + 1);
+								Constant * y = dyn_cast<Constant>(v2);
+								ConstantInt * yint = dyn_cast<ConstantInt>(y);
+								ConstantInt *y32 = ConstantInt::get(Type::getInt32Ty(context), *(yint->getValue().getRawData()));
+								Constant * yarray[4];
+								yarray[0] = yarray[1] = yarray[2] = yarray[3] = y32;
+								ArrayRef<Constant *> yref(yarray, 4);
+								Constant * yVector = ConstantVector::get(yref);
+								BinaryOperator *newvalue = BinaryOperator::CreateLShr(v1, yVector, "");
+								newvalue->insertAfter(callinst);
+								BasicBlock::iterator from(callinst);
+								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+								modified = true;
+								break;
+							}
+
+
+							if (llvmfunc.getName() == "llvm.x86.sse2.psrli.q")//pass
+							{
+								Value *v1 = *(callinst->op_begin());
+								Value *v2 = *(callinst->op_begin() + 1);
+								Constant * y = dyn_cast<Constant>(v2);
+								ConstantInt * yint = dyn_cast<ConstantInt>(y);
+								ConstantInt *y64 = ConstantInt::get(Type::getInt64Ty(context), *(yint->getValue().getRawData()));
+								Constant * y2[2];
+								y2[0] = y64;
+								y2[1] = y64;
+								ArrayRef<Constant *> yref(y2, 2);
+								Constant * yVector = ConstantVector::get(yref);
+								BinaryOperator *newvalue = BinaryOperator::CreateLShr(v1, yVector, "");
+								newvalue->insertAfter(callinst);
+								BasicBlock::iterator from(callinst);
+								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+								modified = true;
+								break;
+							}
+
+							if (llvmfunc.getName() == "llvm.x86.sse2.psrl.dq")//pass
+							{
+								Value *v1 = *(callinst->op_begin());
+								Value *v2 = *(callinst->op_begin() + 1);
+								ConstantInt *y = dyn_cast<ConstantInt>(dyn_cast<Constant>(v2));
+								ConstantInt *y128 = ConstantInt::get(Type::getIntNTy(context, 128), *(y->getValue().getRawData()));
+								// error  here
+								BitCastInst *x128 = new BitCastInst(v1, Type::getIntNTy(context, 128), "x128");
+								//Instruction *x128 = CastInst::CreateZExtOrBitCast(v1, Type::getIntNTy(context, 128), "x128");
+								x128->insertAfter(callinst);
+								Instruction *newX128 = BinaryOperator::CreateLShr(x128, y128, "newX128");
+								newX128->insertAfter(x128);
+								BitCastInst *newvalue = new BitCastInst(newX128, VectorType::get(Type::getInt64Ty(context), 2), "");
+								newvalue->insertAfter(newX128);
+								BasicBlock::iterator from(callinst);
+								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+								modified = true;
+								break;
+							}
+
+							if (llvmfunc.getName() == "llvm.x86.sse2.packuswb.128") //pass //slow
+							{
+								Value *v1 = *(callinst->op_begin());
+								Value *v2 = *(callinst->op_begin() + 1);
+								Constant * index[16];
+								for (int i = 0; i < 16;i++)
+									index[i] = ConstantInt::get(Type::getInt32Ty(context), i);
+								ArrayRef <Constant *> indexref(index,16);
+								Constant * indexVector = ConstantVector::get(indexref);
+								//!! using shuffle vector
+								ShuffleVectorInst * result_16_i16 = new ShuffleVectorInst(v1, v2, indexVector, "result_16_i32");
+								result_16_i16->insertAfter(callinst);
+								TruncInst * newvalue = new TruncInst(result_16_i16, VectorType::get(Type::getInt8Ty(context), 16), "");
+								newvalue->insertAfter(result_16_i16);
+
+								BasicBlock::iterator from(callinst);
+								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+								modified = true;
+								break;
+							}
 						}
 					}
 
@@ -191,3 +280,14 @@ namespace {
 
 char FuncMod::ID = 0;
 static RegisterPass<FuncMod> X("funcmod", "modify a function");
+
+
+static void registerFuncMod(const PassManagerBuilder &,
+	legacy::PassManagerBase &PM) {
+	PM.add(new FuncMod());
+	errs() << "ok!!??\n";
+}
+static RegisterStandardPasses
+RegisterFuncMod(PassManagerBuilder::EP_EnabledOnOptLevel0,
+registerFuncMod);
+
