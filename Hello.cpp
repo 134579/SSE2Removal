@@ -37,6 +37,9 @@
 
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
+
+#define __DEBUG__
+
 using namespace llvm;
 
 namespace {
@@ -46,6 +49,7 @@ namespace {
 
 		public:
 		virtual bool runOnModule(Module &M) {
+			// don't modify the first sse2 call
 			errs() << "run on module!!\n";
 			LLVMContext & context = M.getContext();
 			Module::FunctionListType & funclist = M.getFunctionList();
@@ -226,7 +230,7 @@ namespace {
 								break;
 							}
 
-							if (llvmfunc.getName() == "llvm.x86.sse2.psrl.dq")//pass
+							if (llvmfunc.getName() == "llvm.x86.sse2.psrl.dq")//pass //one to three//two bitcast
 							{
 								Value *v1 = *(callinst->op_begin());
 								Value *v2 = *(callinst->op_begin() + 1);
@@ -245,7 +249,6 @@ namespace {
 								modified = true;
 								break;
 							}
-
 							if (llvmfunc.getName() == "llvm.x86.sse2.packuswb.128") //pass //slow
 							{
 								Value *v1 = *(callinst->op_begin());
@@ -256,13 +259,39 @@ namespace {
 								ArrayRef <Constant *> indexref(index,16);
 								Constant * indexVector = ConstantVector::get(indexref);
 								//!! using shuffle vector
-								ShuffleVectorInst * result_16_i16 = new ShuffleVectorInst(v1, v2, indexVector, "result_16_i32");
-								result_16_i16->insertAfter(callinst);
-								TruncInst * newvalue = new TruncInst(result_16_i16, VectorType::get(Type::getInt8Ty(context), 16), "");
-								newvalue->insertAfter(result_16_i16);
+								ShuffleVectorInst * xy_16_i16 = new ShuffleVectorInst(v1, v2, indexVector, "xy_16_i16");
+								xy_16_i16->insertAfter(callinst);
+								TruncInst * xy_16_i8 = new TruncInst(xy_16_i16, VectorType::get(Type::getInt8Ty(context), 16), "xy_16_i8");
+								xy_16_i8->insertAfter(xy_16_i16);
+
+								Constant * FF_i16 = ConstantInt::get(Type::getInt16Ty(context), 0xFF);
+								Constant * FF_16_i16 = ConstantVector::getSplat(16, FF_i16);
+								ICmpInst * xy_sgt_16_i1 = new ICmpInst(ICmpInst::ICMP_SGT, xy_16_i16, FF_16_i16, "xy_sgt_16_i1");
+								xy_sgt_16_i1->insertAfter(xy_16_i8);
+								
+								Constant * FF_i8 = ConstantInt::get(Type::getInt8Ty(context), 0xFF);
+								Constant * FF_16_i8 = ConstantVector::getSplat(16, FF_i8);
+
+								SelectInst * xy_result_16_i8 = SelectInst::Create(xy_sgt_16_i1, FF_16_i8, xy_16_i8,"xy_result_16_i8");
+								xy_result_16_i8->insertAfter(xy_sgt_16_i1);
+
+								Constant * ZERO_i16 = ConstantInt::get(Type::getInt16Ty(context), 0);
+								Constant * ZERO_16_i16 = ConstantVector::getSplat(16, ZERO_i16);
+								ICmpInst * xy_slt_16_i1 = new ICmpInst(ICmpInst::ICMP_SLT, xy_16_i16, ZERO_16_i16, "xy_slt_16_i1");
+								xy_slt_16_i1->insertAfter(xy_result_16_i8);
+
+								Constant * ZERO_i8 = ConstantInt::get(Type::getInt8Ty(context), 0);
+								Constant * ZERO_16_i8 = ConstantVector::getSplat(16, ZERO_i8);
+								SelectInst * newvalue = SelectInst::Create(xy_slt_16_i1, ZERO_16_i8, xy_result_16_i8);
+								newvalue->insertAfter(xy_slt_16_i1);
 
 								BasicBlock::iterator from(callinst);
 								ReplaceInstWithValue(callinst->getParent()->getInstList(), from, newvalue);
+
+								#ifdef __DEBUG__
+								return true;
+								#endif
+
 								modified = true;
 								break;
 							}
